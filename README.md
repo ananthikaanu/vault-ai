@@ -10,7 +10,7 @@
 [![Redux](https://img.shields.io/badge/Redux_Toolkit-764abc?style=for-the-badge&logo=redux&logoColor=white)](https://redux-toolkit.js.org)
 [![Vite](https://img.shields.io/badge/Vite-646cff?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev)
 
-> **Live Demo:** [vault-ai.vercel.app](https://vault-ai.vercel.app) &nbsp;·&nbsp; **Backend:** [vault-ai-backend.onrender.com](https://vault-ai-backend.onrender.com)
+> **Live Demo:** [vault-ai-ananthikaanu.vercel.app](https://vault-ai-ananthikaanu.vercel.app) &nbsp;·&nbsp; **Backend:** [vault-ai-backend.onrender.com](https://vault-ai-backend.onrender.com)
 
 </div>
 
@@ -81,7 +81,7 @@
 
 ### 1. Clone
 ```bash
-git clone https://github.com/your-username/vault-ai.git
+git clone https://github.com/ananthikaanu/vault-ai.git
 cd vault-ai
 ```
 
@@ -204,7 +204,7 @@ vault-ai/
 
 ## 📄 License
 
-MIT © [Ananthika](https://github.com/your-username)
+MIT © [Ananthika](https://github.com/ananthikaanu)
 
 ---
 
