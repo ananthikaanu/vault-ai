@@ -1764,6 +1764,29 @@ body {
   border-radius: 99px;
 }
 
+.bp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.bp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  border: 1px solid;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.bp-badge strong {
+  font-weight: 700;
+}
+
 .home-card__footer {
   display: flex;
   align-items: center;
