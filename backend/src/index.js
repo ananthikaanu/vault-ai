@@ -1,25 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { v4 as uuidv4 } from "uuid";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = join(__dirname, "..", "thoughts-data.json");
-
-const loadData = () => {
-  if (existsSync(DATA_FILE)) {
-    try { return JSON.parse(readFileSync(DATA_FILE, "utf-8")) || []; }
-    catch { return []; }
-  }
-  return [];
-};
-
-const saveData = () => {
-  try { writeFileSync(DATA_FILE, JSON.stringify(thoughts, null, 2)); }
-  catch (e) { console.error("Failed to persist data:", e.message); }
-};
+import { createClient } from "@supabase/supabase-js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,99 +8,138 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-let thoughts = loadData();
-console.log(`📂 Loaded ${thoughts.length} thoughts from disk`);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
 // ─── Thoughts CRUD ────────────────────────────────────────────────────────────
 
-app.get("/api/thoughts", (req, res) => {
+app.get("/api/thoughts", async (req, res) => {
   const { search, category } = req.query;
-  // Only return non-deleted thoughts
-  let result = thoughts.filter((t) => !t.deletedAt);
-  if (category && category !== "all") result = result.filter((t) => t.category === category);
+  let query = supabase
+    .from("thoughts")
+    .select("*")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+
+  if (category && category !== "all") query = query.eq("category", category);
+
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+
+  let result = data;
   if (search) {
     const q = search.toLowerCase();
-    result = result.filter(
-      (t) => t.content.toLowerCase().includes(q) ||
+    result = data.filter(
+      (t) =>
+        t.content?.toLowerCase().includes(q) ||
         t.title?.toLowerCase().includes(q) ||
         t.tags?.some((tag) => tag.toLowerCase().includes(q))
     );
   }
-  result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  res.json(result);
+  res.json(result.map(toClient));
 });
 
-app.get("/api/thoughts/:id", (req, res) => {
-  const thought = thoughts.find((t) => t.id === req.params.id);
-  if (!thought) return res.status(404).json({ error: "Not found" });
-  res.json(thought);
+app.get("/api/thoughts/:id", async (req, res) => {
+  const { data, error } = await supabase
+    .from("thoughts")
+    .select("*")
+    .eq("id", req.params.id)
+    .single();
+  if (error || !data) return res.status(404).json({ error: "Not found" });
+  res.json(toClient(data));
 });
 
-app.post("/api/thoughts", (req, res) => {
+app.post("/api/thoughts", async (req, res) => {
   const { content, category, tags, title, type } = req.body;
   if (!content) return res.status(400).json({ error: "Content is required" });
-  const thought = {
-    id: uuidv4(), content, title: title || "",
-    category: category || "uncategorized", tags: tags || [],
-    type: type || "note", completed: false, starred: false,
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  };
-  thoughts.push(thought);
-  saveData();
-  res.status(201).json(thought);
+
+  const { data, error } = await supabase
+    .from("thoughts")
+    .insert({
+      content,
+      title: title || "",
+      category: category || "uncategorized",
+      tags: tags || [],
+      type: type || "note",
+      completed: false,
+      starred: false,
+    })
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(toClient(data));
 });
 
-app.put("/api/thoughts/:id", (req, res) => {
-  const idx = thoughts.findIndex((t) => t.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: "Not found" });
-  thoughts[idx] = { ...thoughts[idx], ...req.body, id: thoughts[idx].id, updatedAt: new Date().toISOString() };
-  saveData();
-  res.json(thoughts[idx]);
+app.put("/api/thoughts/:id", async (req, res) => {
+  const allowed = ["content", "title", "category", "tags", "type", "completed", "starred"];
+  const updates = {};
+  allowed.forEach((k) => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+  updates.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("thoughts")
+    .update(updates)
+    .eq("id", req.params.id)
+    .select()
+    .single();
+
+  if (error || !data) return res.status(404).json({ error: error?.message || "Not found" });
+  res.json(toClient(data));
 });
 
-// Soft delete — sets deletedAt timestamp
-app.delete("/api/thoughts/:id", (req, res) => {
-  const idx = thoughts.findIndex((t) => t.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: "Not found" });
-  thoughts[idx] = { ...thoughts[idx], deletedAt: new Date().toISOString() };
-  saveData();
+// Soft delete — sets deleted_at
+app.delete("/api/thoughts/:id", async (req, res) => {
+  const { error } = await supabase
+    .from("thoughts")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
 
 // ─── Trash ────────────────────────────────────────────────────────────────────
 
-// Return all soft-deleted thoughts
-app.get("/api/trash", (req, res) => {
-  const trashed = thoughts
-    .filter((t) => !!t.deletedAt)
-    .sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt));
-  res.json(trashed);
+app.get("/api/trash", async (req, res) => {
+  const { data, error } = await supabase
+    .from("thoughts")
+    .select("*")
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data.map(toClient));
 });
 
-// Restore a thought from trash
-app.post("/api/thoughts/:id/restore", (req, res) => {
-  const idx = thoughts.findIndex((t) => t.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: "Not found" });
-  const { deletedAt, ...restored } = thoughts[idx];
-  thoughts[idx] = { ...restored, updatedAt: new Date().toISOString() };
-  saveData();
-  res.json(thoughts[idx]);
+app.post("/api/thoughts/:id/restore", async (req, res) => {
+  const { data, error } = await supabase
+    .from("thoughts")
+    .update({ deleted_at: null, updated_at: new Date().toISOString() })
+    .eq("id", req.params.id)
+    .select()
+    .single();
+  if (error || !data) return res.status(404).json({ error: error?.message || "Not found" });
+  res.json(toClient(data));
 });
 
-// Permanent delete from trash
-app.delete("/api/trash/:id", (req, res) => {
-  const idx = thoughts.findIndex((t) => t.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: "Not found" });
-  thoughts.splice(idx, 1);
-  saveData();
+app.delete("/api/trash/:id", async (req, res) => {
+  const { error } = await supabase.from("thoughts").delete().eq("id", req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 
-app.get("/api/export", (req, res) => {
+app.get("/api/export", async (req, res) => {
   const { format = "markdown" } = req.query;
-  const activeThoughts = thoughts.filter((t) => !t.deletedAt);
+  const { data: rows, error } = await supabase
+    .from("thoughts")
+    .select("*")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  const activeThoughts = rows.map(toClient);
 
   if (format === "json") {
     res.setHeader("Content-Type", "application/json");
@@ -142,15 +162,20 @@ app.get("/api/export", (req, res) => {
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
-app.get("/api/stats", (req, res) => {
-  const activeThoughts = thoughts.filter((t) => !t.deletedAt);
+app.get("/api/stats", async (req, res) => {
+  const { data: rows, error } = await supabase
+    .from("thoughts")
+    .select("*")
+    .is("deleted_at", null);
+  if (error) return res.status(500).json({ error: error.message });
+  const activeThoughts = rows.map(toClient);
+
   const categories = {}, types = {};
   activeThoughts.forEach((t) => {
     categories[t.category] = (categories[t.category] || 0) + 1;
     types[t.type] = (types[t.type] || 0) + 1;
   });
 
-  // Capture streak — consecutive days ending today
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const activeDays = new Set(activeThoughts.map((t) => {
     const d = new Date(t.createdAt); d.setHours(0, 0, 0, 0); return d.getTime();
@@ -207,9 +232,7 @@ function tfidfSearch(query, allThoughts) {
 
 function generateLocalAnswer(query, matched, total) {
   const q = query.toLowerCase().trim();
-  if (matched.length === 0) {
-    return `No thoughts found matching "${query}". Try different keywords or capture some notes about this topic first.`;
-  }
+  if (matched.length === 0) return `No thoughts found matching "${query}". Try different keywords or capture some notes about this topic first.`;
   if (/\b(summarize|summary|overview|recap|brief)\b/.test(q)) {
     const bullets = matched.slice(0, 3).map((t) => `• ${t.title || t.content.split(/[.\n]/)[0].slice(0, 70)}`).join("\n");
     return `Here's a summary from your vault:\n\n${bullets}`;
@@ -226,9 +249,7 @@ function generateLocalAnswer(query, matched, total) {
     const ideas = matched.filter((t) => t.type === "idea");
     if (ideas.length > 0) return `You have ${ideas.length} idea${ideas.length !== 1 ? "s" : ""} related to this:`;
   }
-  if (/\b(recent|latest|last|new|today)\b/.test(q)) {
-    return `Here are your most recent thoughts about "${query}":`;
-  }
+  if (/\b(recent|latest|last|new|today)\b/.test(q)) return `Here are your most recent thoughts about "${query}":`;
   const cats = [...new Set(matched.map((t) => t.category).filter((c) => c !== "uncategorized"))];
   if (cats.length > 0) return `Found ${matched.length} thought${matched.length !== 1 ? "s" : ""} in your ${cats.join(" & ")} notes:`;
   return `Found ${matched.length} relevant thought${matched.length !== 1 ? "s" : ""} in your vault:`;
@@ -251,7 +272,7 @@ async function callOpenRouter(apiKey, prompt, modelIndex = 0) {
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
-      "HTTP-Referer": "http://localhost:5173",
+      "HTTP-Referer": "https://vault-ai-m2l7.vercel.app",
       "X-Title": "Vault AI",
     },
     body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_tokens: 1024 }),
@@ -317,19 +338,22 @@ app.post("/api/ai/search", async (req, res) => {
   const { query, apiKey } = req.body;
   if (!query) return res.status(400).json({ error: "query is required" });
 
-  const activeThoughts = thoughts.filter((t) => !t.deletedAt);
+  const { data: rows, error } = await supabase
+    .from("thoughts")
+    .select("*")
+    .is("deleted_at", null);
+  if (error) return res.status(500).json({ error: error.message });
+  const activeThoughts = rows.map(toClient);
 
   if (activeThoughts.length === 0) {
     return res.json({ answer: "Your vault is empty. Start capturing thoughts to search them!", thoughts: [], local: true });
   }
 
-  // No API key — use local TF-IDF search
   if (!apiKey) {
     const matched = tfidfSearch(query, activeThoughts);
     return res.json({ answer: generateLocalAnswer(query, matched, activeThoughts.length), thoughts: matched, local: true });
   }
 
-  // Build AI prompt
   const allText = activeThoughts.map((t, i) => `[${i}] (${t.category}/${t.type}) ${t.title || ""}: ${t.content}`).join("\n");
   const prompt = `You are a personal knowledge assistant. The user has these thoughts saved:
 ${allText}
@@ -353,6 +377,25 @@ If nothing matches: {"answer":"I couldn't find thoughts related to that.","indic
     res.json({ answer: generateLocalAnswer(query, matched, activeThoughts.length), thoughts: matched, local: true });
   }
 });
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Convert snake_case DB row → camelCase for the frontend
+function toClient(row) {
+  return {
+    id: row.id,
+    title: row.title || "",
+    content: row.content,
+    category: row.category,
+    type: row.type,
+    tags: row.tags || [],
+    completed: row.completed,
+    starred: row.starred,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    ...(row.deleted_at ? { deletedAt: row.deleted_at } : {}),
+  };
+}
 
 app.listen(PORT, () => {
   console.log(`🧠 Vault AI backend running on http://localhost:${PORT}`);
