@@ -74,11 +74,13 @@ export function HomeThoughtCard({ thought, delay = 0 }: Props) {
         {thought.title && (
           <h4 className="home-card__title">{thought.title}</h4>
         )}
-        <p className="home-card__content">
-          {thought.content.length > 100
-            ? `${thought.content.slice(0, 100)}...`
-            : thought.content}
-        </p>
+        {thought.content.trim() !== thought.title?.trim() && (
+          <p className="home-card__content">
+            {thought.content.length > 100
+              ? `${thought.content.slice(0, 100)}...`
+              : thought.content}
+          </p>
+        )}
       </div>
 
       {thought.tags.length > 0 && (

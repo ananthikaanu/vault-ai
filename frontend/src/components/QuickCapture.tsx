@@ -29,6 +29,8 @@ function detectCategory(text: string): ThoughtCategory {
 
 function extractTitle(text: string): string {
   const first = text.split(/[.\n]/)[0].trim();
+  // Don't create a title if it's identical to the full content
+  if (first === text.trim()) return "";
   return first.length > 60 ? first.slice(0, 57) + "..." : first;
 }
 
