@@ -50,6 +50,6 @@ export const thoughtsApi = {
       .then((r) => r.data),
 
   exportVault: (format: "markdown" | "json" = "markdown") => {
-    window.open(`/api/export?format=${format}`, "_blank");
+    window.open(`${BASE}/export?format=${format}`, "_blank");
   },
 };

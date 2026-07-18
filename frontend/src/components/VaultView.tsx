@@ -16,12 +16,12 @@ export function VaultView() {
   const [localSearch, setLocalSearch] = useState("");
 
   useEffect(() => {
-    dispatch(fetchThoughts());
+    dispatch(fetchThoughts({}));
   }, [dispatch]);
 
   const handleCategoryChange = (cat: string) => {
     dispatch(setSelectedCategory(cat));
-    dispatch(fetchThoughts(cat !== "all" ? { category: cat } : undefined));
+    dispatch(fetchThoughts(cat !== "all" ? { category: cat } : {}));
   };
 
   const filtered = localSearch
