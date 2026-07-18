@@ -1,6 +1,6 @@
 import { useState, KeyboardEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trash2, CheckSquare } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAppSelector, useAppDispatch } from "../hooks/redux";
 import { createThought, updateThought, trashThought } from "../store";
@@ -37,19 +37,26 @@ export function TasksPage() {
     tab === "pending" ? pending :
     done;
 
-  const handleAddTask = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter") return;
-    const text = newTask.trim();
-    if (!text) return;
-    dispatch(createThought({
-      content: text,
-      title: text.slice(0, 60),
+  const addTask = async (text: string) => {
+    if (!text.trim()) return;
+    setNewTask("");
+    const result = await dispatch(createThought({
+      content: text.trim(),
+      title: text.trim().slice(0, 60),
       type: "task",
       category: "uncategorized",
       tags: [],
     }));
-    setNewTask("");
-    toast.success("Task added!");
+    if (createThought.fulfilled.match(result)) {
+      toast.success("Task added!");
+    } else {
+      setNewTask(text.trim());
+      toast.error("Failed to save task — try again");
+    }
+  };
+
+  const handleAddTask = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") addTask(newTask);
   };
 
   const handleToggle = (task: Thought) => {
@@ -101,20 +108,7 @@ export function TasksPage() {
           onChange={(e) => setNewTask(e.target.value)}
           onKeyDown={handleAddTask}
         />
-        <button
-          onClick={() => {
-            if (!newTask.trim()) return;
-            dispatch(createThought({
-              content: newTask.trim(),
-              title: newTask.trim().slice(0, 60),
-              type: "task",
-              category: "uncategorized",
-              tags: [],
-            }));
-            setNewTask("");
-            toast.success("Task added!");
-          }}
-        >
+        <button onClick={() => addTask(newTask)}>
           Add Task
         </button>
       </div>
