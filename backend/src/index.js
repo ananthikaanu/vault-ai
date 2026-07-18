@@ -200,7 +200,7 @@ app.get("/api/stats", async (req, res) => {
 const STOP = new Set(["a","an","the","is","are","was","were","be","been","have","has","had","do","does","did","will","would","could","should","may","might","can","to","of","in","for","on","with","at","by","from","and","or","but","not","this","that","my","your","its","our","their","i","me","we","you","he","she","it","they","them"]);
 
 function tokenize(text) {
-  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w));
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length >= 2 && !STOP.has(w));
 }
 
 function tfidfSearch(query, allThoughts) {

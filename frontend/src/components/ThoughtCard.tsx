@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { useAppDispatch } from "../hooks/redux";
 import { updateThought, trashThought } from "../store";
 import { CATEGORY_CONFIG, TYPE_CONFIG } from "../utils/constants";
+import { extractBP, classifyBP } from "../utils/bp";
 import type { Thought } from "../types";
 
 interface Props {
@@ -19,6 +20,7 @@ export function ThoughtCard({ thought, viewMode }: Props) {
 
   const cat = CATEGORY_CONFIG[thought.category] || CATEGORY_CONFIG.uncategorized;
   const typeInfo = TYPE_CONFIG[thought.type] || TYPE_CONFIG.note;
+  const bpReadings = extractBP(thought.content + " " + (thought.title || ""));
 
   const handleToggleComplete = () => {
     dispatch(updateThought({ id: thought.id, data: { completed: !thought.completed } }));
@@ -103,6 +105,24 @@ export function ThoughtCard({ thought, viewMode }: Props) {
           {thought.tags.map((tag) => (
             <span key={tag} className="tag">{tag}</span>
           ))}
+        </div>
+      )}
+
+      {bpReadings.length > 0 && (
+        <div className="bp-badges">
+          {bpReadings.map((r, i) => {
+            const s = classifyBP(r.systolic, r.diastolic);
+            return (
+              <span
+                key={i}
+                className="bp-badge"
+                style={{ background: s.bg, color: s.color, borderColor: s.color + "44" }}
+                title={`${r.systolic}/${r.diastolic} mmHg — ${s.label}`}
+              >
+                {s.emoji} {r.raw} <strong>{s.label}</strong>
+              </span>
+            );
+          })}
         </div>
       )}
 
