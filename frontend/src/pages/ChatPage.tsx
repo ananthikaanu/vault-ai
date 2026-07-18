@@ -22,6 +22,37 @@ interface Chat {
   createdAt: string;
 }
 
+function ThoughtAddRow({ thought, onAdd }: { thought: Thought; onAdd: (t: Thought, text: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const submit = async () => {
+    if (!text.trim()) return;
+    await onAdd(thought, text.trim());
+    setOpen(false);
+    setText("");
+  };
+  return (
+    <>
+      <button className="chat-add-btn" onClick={() => { setOpen((o) => !o); setText(""); }}>
+        <Plus size={11} /> Add
+      </button>
+      {open && (
+        <div className="chat-add-input">
+          <input
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Type what to add..."
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") setOpen(false); }}
+          />
+          <button className="chat-add-confirm" onClick={submit}><Check size={12} /></button>
+          <button className="chat-add-cancel" onClick={() => setOpen(false)}><X size={12} /></button>
+        </div>
+      )}
+    </>
+  );
+}
+
 const SUGGESTIONS = [
   "What are my top ideas?",
   "Show me pending tasks",
@@ -39,8 +70,6 @@ export function ChatPage() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [addingToId, setAddingToId] = useState<string | null>(null);
-  const [addText, setAddText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -102,13 +131,9 @@ export function ChatPage() {
     }
   };
 
-  const handleAddToThought = async (thought: Thought) => {
-    const text = addText.trim();
-    if (!text) return;
+  const handleAddToThought = async (thought: Thought, text: string) => {
     const updated = thought.content + "\n• " + text;
     await dispatch(updateThought({ id: thought.id, data: { content: updated } }));
-    setAddingToId(null);
-    setAddText("");
     toast.success(`Added to "${thought.title || "thought"}"`);
   };
 
@@ -197,33 +222,11 @@ export function ChatPage() {
                         <div key={t.id} className="chat-thought-ref">
                           <div className="chat-thought-ref__header">
                             <strong>{t.title || "Thought"}</strong>
-                            <button
-                              className="chat-add-btn"
-                              onClick={() => { setAddingToId(addingToId === t.id ? null : t.id); setAddText(""); }}
-                              title="Add to this thought"
-                            >
-                              <Plus size={11} /> Add
-                            </button>
+                            <ThoughtAddRow thought={t} onAdd={handleAddToThought} />
                           </div>
                           <span className="chat-thought-ref__body">
                             {t.content.length > 90 ? t.content.slice(0, 90) + "..." : t.content}
                           </span>
-                          {addingToId === t.id && (
-                            <div className="chat-add-input">
-                              <input
-                                autoFocus
-                                value={addText}
-                                onChange={(e) => setAddText(e.target.value)}
-                                placeholder="Type what to add..."
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleAddToThought(t);
-                                  if (e.key === "Escape") setAddingToId(null);
-                                }}
-                              />
-                              <button className="chat-add-confirm" onClick={() => handleAddToThought(t)}><Check size={12} /></button>
-                              <button className="chat-add-cancel" onClick={() => setAddingToId(null)}><X size={12} /></button>
-                            </div>
-                          )}
                         </div>
                       ))}
                     </div>
